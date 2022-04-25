@@ -245,7 +245,7 @@ public struct ContractV2:ContractProtocol {
         }
     }
     
-    public func decodeInputData(_ data: Data) -> [String:Any]? {
+    public func decodeInputData(_ data: Data) -> (method: String, parameters:[String:Any])? {
         guard data.count % 32 == 4 else {return nil}
         let methodSignature = data[0..<4]
         let foundFunction = self._abi.filter { (m) -> Bool in
@@ -256,10 +256,13 @@ public struct ContractV2:ContractProtocol {
                 return false
             }
         }
-        guard foundFunction.count == 1 else {
+        guard let functionElement = foundFunction.first,
+                case .function(let function) = functionElement,
+                let name = function.name,
+                let parameters = functionElement.decodeInputData(Data(data[4 ..< data.count])) else {
             return nil
         }
-        let function = foundFunction[0]
-        return function.decodeInputData(Data(data[4 ..< data.count]))
+        
+        return (name ,parameters)
     }
 }

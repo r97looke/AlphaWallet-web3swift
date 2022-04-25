@@ -212,7 +212,7 @@ public struct Contract:ContractProtocol {
         return nil
     }
     
-    public func decodeInputData(_ data: Data) -> [String : Any]? {
+    public func decodeInputData(_ data: Data) -> (method: String, parameters:[String:Any])? {
         return nil
     }
 }
