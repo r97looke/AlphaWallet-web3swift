@@ -25,7 +25,7 @@ public struct EthereumTransaction: CustomStringConvertible {
         get{
             if (self.r == BigUInt(0) && self.s == BigUInt(0)) {
                 return self.v
-            } else if (self.v == BigUInt(27) || self.v == BigUInt(28) || self.v == BigUInt(0)) {
+            } else if (self.v == BigUInt(27) || self.v == BigUInt(28) || self.v == BigUInt(0) || self.v == BigUInt(1)) {
                 return nil
             } else {
                 return ((self.v - BigUInt(1)) / BigUInt(2)) - BigUInt(17)
@@ -145,7 +145,7 @@ public struct EthereumTransaction: CustomStringConvertible {
             normalizedV = self.v - BigUInt(35) - self.chainID! - self.chainID!
         } else if (inferedChainID != nil) {
             normalizedV = self.v - BigUInt(35) - inferedChainID! - inferedChainID!
-        } else if (self.v != BigUInt(0)) {
+        } else if (self.v != BigUInt(0) && self.v != BigUInt(1)) {
             normalizedV = self.v - BigUInt(27)
         }
         guard let vData = normalizedV.serialize().setLengthLeft(1) else {return nil}
