@@ -87,6 +87,18 @@ public class Web3HttpProvider: Web3Provider {
         return res
     }
     
+    public func sendAsync(_ request: JSONRPCrequest, queue: DispatchQueue = .main) -> Promise<JSONRPCresponse> {
+        if request.method == nil {
+            return Promise(error: Web3Error.nodeError("RPC method is nill"))
+        }
+        
+        return Web3HttpProvider.post(request, providerURL: self.url, queue: queue, session: self.session)
+    }
+    
+    public func sendAsync(_ requests: JSONRPCrequestBatch, queue: DispatchQueue = .main) -> Promise<JSONRPCresponseBatch> {
+        return Web3HttpProvider.post(requests, providerURL: self.url, queue: queue, session: self.session)
+    }
+    
     internal func syncPostRaw(_ request: JSONRPCrequest) -> Any? {
         return Web3HttpProvider.syncPost(request, providerURL: self.url)
     }
@@ -152,3 +164,76 @@ public class Web3HttpProvider: Web3Provider {
     }
 }
 
+public class Web3HttpMultiProvider : Web3HttpProvider {
+    var urls: [URL]
+    let errorHandler: (URL, Error?)->Void
+    
+    public init?(httpProviderURLs: [URL], network net: Networks? = nil, errorHandler:@escaping (URL, Error?)->Void) {
+        if httpProviderURLs.isEmpty {
+            return nil
+        }
+        urls = httpProviderURLs
+        self.errorHandler = errorHandler
+        super.init(httpProviderURLs.first!, network: net)
+    }
+    
+    override internal func syncPost(_ request: JSONRPCrequest) -> Any? {
+        for url in urls.shuffled() {
+            if let result = Web3HttpProvider.syncPost(request, providerURL: url) {
+                errorHandler(url, nil)
+                return result
+            }
+            else {
+                errorHandler(url, Web3Error.unknownError)
+            }
+        }
+        return nil
+    }
+    
+    override internal func syncPost(_ requests: [JSONRPCrequest]) -> Any? {
+        let batch = JSONRPCrequestBatch(requests: requests)
+        for url in urls.shuffled() {
+            if let result = Web3HttpProvider.syncPost(batch, providerURL: url) {
+                errorHandler(url, nil)
+                return result
+            }
+            else {
+                errorHandler(url, Web3Error.unknownError)
+            }
+        }
+        return nil
+    }
+    
+    public override func sendAsync(_ request: JSONRPCrequest, queue: DispatchQueue = .main) -> Promise<JSONRPCresponse> {
+        if request.method == nil {
+            return Promise(error: Web3Error.nodeError("RPC method is nill"))
+        }
+        
+        return attempt(urls: urls.shuffled()) { url in
+            Web3HttpProvider.post(request, providerURL: url, queue: queue, session: self.session)
+        }
+    }
+    
+    public override func sendAsync(_ requests: JSONRPCrequestBatch, queue: DispatchQueue = .main) -> Promise<JSONRPCresponseBatch> {
+        return attempt(urls: urls.shuffled()) { url in
+            Web3HttpProvider.post(requests, providerURL: url, queue: queue, session: self.session)
+        }
+    }
+    
+    func attempt<T>(urls: [URL], _ body: @escaping (URL) -> Promise<T>) -> Promise<T> {
+        var urlsToTry = urls
+        let errorHandler = errorHandler
+        func attempt() -> Promise<T> {
+            let url = urlsToTry.removeFirst()
+            return body(url).map({ v -> T in
+                errorHandler(url, nil)
+                return v
+            }).recover { error -> Promise<T> in
+                errorHandler(url, error)
+                guard urlsToTry.isEmpty == false else { throw error }
+                return attempt()
+            }
+        }
+        return attempt()
+    }
+}
